@@ -32,20 +32,11 @@ venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 ## API Endpoints
 
-### Birth Certificates
-- `GET /birth-certificates/` - List birth certificates (supports pagination)
-- `GET /birth-certificates/{id}` - Retrieve a specific birth certificate by ID
-- `POST /birth-certificates/` - Create a new birth certificate
 
-### Children
-- `GET /children/` - List children (supports pagination)
-- `GET /children/{id}` - Retrieve a specific child by ID
-- `POST /children/` - Create a new child record
-
-### Parents
-- `GET /parents/` - List parents (supports pagination)
-- `GET /parents/{id}` - Retrieve a specific parent by ID
-- `POST /parents/` - Create a new parent record
+### Endpoints
+- `POST /birth-certificate/` — Create a birth certificate (with child, father, mother info)
+- `GET /birth-certificate/{registration_number}` — Get a birth certificate by registration number
+- `GET /birth-certificates/` — List birth certificates (paginated)
 
 ## API Documentation
 Interactive API docs are available at:
