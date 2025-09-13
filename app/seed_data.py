@@ -64,8 +64,8 @@ def generate_fake_date(start_year=1960, end_year=2025):
     end_date = datetime(end_year, 12, 31)
     return fake.date_between(start_date=start_date, end_date=end_date)
 
-# Generate 30 birth certificates
-for _ in range(30):
+# Generate 10 birth certificates
+for _ in range(10):
     # Create certificate
     cert_date = generate_fake_date(2020, 2025)
     db_certificate = database_models.Certificate(
