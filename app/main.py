@@ -1,11 +1,14 @@
-from fastapi import FastAPI, Depends, HTTPException, Query
+from fastapi import FastAPI, Depends, HTTPException, status, Query
+from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
 from pydantic import BaseModel
+from datetime import timedelta
 
 from app.database import engine, get_db
 from app.models import models, database_models
 from app.models.database_models import Base
+from app.auth import auth, schemas as auth_schemas, crud as auth_crud
 
 class PaginatedBirthCertificates(BaseModel):
     total: int
@@ -18,8 +21,46 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Birth Certificate Registration API")
 
+# Authentication endpoints
+@app.post("/token", response_model=auth_schemas.Token)
+async def login_for_access_token(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db)
+):
+    user = auth_crud.get_user_by_username(db, form_data.username)
+    if not user or not auth.verify_password(form_data.password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token_expires = timedelta(minutes=auth.ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = auth.create_access_token(
+        data={"sub": user.username, "role": user.role}, 
+        expires_delta=access_token_expires
+    )
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@app.post("/users/", response_model=auth_schemas.User)
+async def create_user(
+    user: auth_schemas.UserCreate,
+    db: Session = Depends(get_db),
+    current_user: auth_schemas.User = Depends(auth.get_current_user)
+):
+    if current_user.role != auth.models.UserRole.REGISTRY_OFFICE:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only registry office can create new users"
+        )
+    return auth_crud.create_user(db=db, user=user)
+
+# Birth Certificate endpoints
 @app.post("/birth-certificate/", response_model=models.BirthCertificate)
-def create_birth_certificate(birth_certificate: models.BirthCertificate, db: Session = Depends(get_db)):
+async def create_birth_certificate(
+    birth_certificate: models.BirthCertificate,
+    db: Session = Depends(get_db),
+    current_user: auth_schemas.User = Depends(auth.check_permission("create"))
+):
     # Create certificate
     db_certificate = database_models.Certificate(
         title=birth_certificate.certificate_info.title,
@@ -71,7 +112,11 @@ def create_birth_certificate(birth_certificate: models.BirthCertificate, db: Ses
     return birth_certificate
 
 @app.get("/birth-certificate/{registration_number}", response_model=models.BirthCertificate)
-def get_birth_certificate(registration_number: str, db: Session = Depends(get_db)):
+async def get_birth_certificate(
+    registration_number: str,
+    db: Session = Depends(get_db),
+    current_user: auth_schemas.User = Depends(auth.check_permission("read"))
+):
     certificate = db.query(database_models.Certificate).filter(
         database_models.Certificate.registration_number == registration_number
     ).first()
@@ -112,10 +157,11 @@ def get_birth_certificate(registration_number: str, db: Session = Depends(get_db
     )
 
 @app.get("/birth-certificates/", response_model=PaginatedBirthCertificates)
-def get_birth_certificates(
+async def get_birth_certificates(
     page: int = Query(1, ge=1, description="Page number"),
     limit: int = Query(10, ge=1, le=100, description="Items per page"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: auth_schemas.User = Depends(auth.check_permission("read"))
 ):
     try:
         # Calculate skip (offset) based on page and limit
@@ -139,14 +185,6 @@ def get_birth_certificates(
             .all()
         )
     
-        # Print debug information
-        print(f"Retrieved {len(certificates)} certificates")
-        for cert in certificates:
-            print(f"Certificate {cert.registration_number}:")
-            print(f"  Child: {cert.child.name if cert.child else 'None'}")
-            print(f"  Father: {cert.father.name if cert.father else 'None'}")
-            print(f"  Mother: {cert.mother.name if cert.mother else 'None'}")
-        
         # Convert to response model
         birth_certificates = []
         for cert in certificates:

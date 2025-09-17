@@ -115,8 +115,41 @@ for _ in range(10):
     )
     db.add(db_mother)
 
+# Create test users
+from app.auth.models import User, UserRole
+from app.auth.auth import get_password_hash
+
+test_users = [
+    {
+        "username": "hospital_user",
+        "password": "hospital123",
+        "role": UserRole.HOSPITAL
+    },
+    {
+        "username": "registry_user",
+        "password": "registry123",
+        "role": UserRole.REGISTRY_OFFICE
+    },
+    {
+        "username": "police_user",
+        "password": "police123",
+        "role": UserRole.POLICE
+    }
+]
+
+for user_data in test_users:
+    # Check if user already exists
+    existing_user = db.query(User).filter(User.username == user_data["username"]).first()
+    if not existing_user:
+        db_user = User(
+            username=user_data["username"],
+            hashed_password=get_password_hash(user_data["password"]),
+            role=user_data["role"]
+        )
+        db.add(db_user)
+
 # Commit all records to the database
 db.commit()
 db.close()
 
-print("Successfully inserted 30 birth certificate records with fake data!")
+print("Successfully inserted birth certificate records and test users with fake data!")
